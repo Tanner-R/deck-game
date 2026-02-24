@@ -96,14 +96,28 @@ function TabNav({ active, onChange }) {
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 function Dashboard({ workouts, people, weeklyCards }) {
   const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  const daysLeft = daysInMonth - now.getDate();
+  const [viewMonth, setViewMonth] = useState(now.getMonth());
+  const [viewYear, setViewYear] = useState(now.getFullYear());
+
+  const isCurrentMonth = viewMonth === now.getMonth() && viewYear === now.getFullYear();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const daysLeft = isCurrentMonth ? daysInMonth - now.getDate() : 0;
+
+  const monthName = new Date(viewYear, viewMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  function prevMonth() {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
+    else setViewMonth(m => m - 1);
+  }
+  function nextMonth() {
+    if (isCurrentMonth) return;
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
+    else setViewMonth(m => m + 1);
+  }
 
   const monthWorkouts = workouts.filter(w => {
     const d = new Date(w.date + 'T00:00:00');
-    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    return d.getMonth() === viewMonth && d.getFullYear() === viewYear;
   });
 
   // Points per person
@@ -156,11 +170,34 @@ function Dashboard({ workouts, people, weeklyCards }) {
 
   return (
     <div className="dashboard">
+      {/* Month Selector */}
+      <div className="month-selector">
+        <button className="month-nav" onClick={prevMonth}>‹</button>
+        <span className="month-label">{monthName}</span>
+        <button className="month-nav" onClick={nextMonth} disabled={isCurrentMonth}>›</button>
+      </div>
+
+      {/* First-run guidance */}
+      {isCurrentMonth && people.length === 0 && monthWorkouts.length === 0 && (
+        <div className="dash-card onboarding-card">
+          <div className="onboarding-title">Welcome to Deck Game!</div>
+          <div className="onboarding-steps">
+            <div className="onboarding-step"><span className="step-num">1</span> Add players in <strong>Settings</strong> (gear icon)</div>
+            <div className="onboarding-step"><span className="step-num">2</span> Draw cards in <strong>Weekly Cards</strong></div>
+            <div className="onboarding-step"><span className="step-num">3</span> Start logging workouts to earn points</div>
+          </div>
+        </div>
+      )}
+
       {/* Goal Progress */}
       <div className="dash-card goal-card">
         <div className="dash-card-header">
           <h3>Monthly Goal</h3>
-          <span className="dash-badge">{daysLeft} days left</span>
+          {isCurrentMonth ? (
+            <span className="dash-badge">{daysLeft} days left</span>
+          ) : (
+            <span className="dash-badge">{goalProgress >= 100 ? 'Goal reached!' : 'Past month'}</span>
+          )}
         </div>
         <div className="goal-display">
           <div className="goal-number">{Math.round(totalPoints)}</div>
@@ -705,42 +742,58 @@ function WorkoutHistory({ workouts, onRefresh, onError }) {
 
   const sorted = [...workouts].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
 
+  // Group workouts by date
+  const grouped = [];
+  let currentDate = null;
+  sorted.forEach(w => {
+    if (w.date !== currentDate) {
+      currentDate = w.date;
+      grouped.push({ date: w.date, workouts: [w] });
+    } else {
+      grouped[grouped.length - 1].workouts.push(w);
+    }
+  });
+
   return (
     <div className="history">
       <h2>Workout History</h2>
-      {sorted.length === 0 ? (
+      {grouped.length === 0 ? (
         <div className="cards-empty">
           <div className="empty-icon">📋</div>
           <p>No workouts logged yet!</p>
         </div>
       ) : (
         <div className="history-list">
-          {sorted.map(w => (
-            <div key={w.id} className="history-item">
-              <div className="history-date">{formatDate(w.date)}</div>
-              <div className="history-content">
-                <div className="history-activity">{w.activity}</div>
-                <div className="history-people">{w.persons}</div>
-                {w.card_used && (
-                  <div className="history-card" style={{ color: SUIT_COLORS[w.card_used.split(' of ')[1]] }}>
-                    {SUIT_ICONS[w.card_used.split(' of ')[1]]} {w.card_used} (+{w.bonus_points})
+          {grouped.map(group => (
+            <div key={group.date} className="history-group">
+              <div className="history-group-header">{formatDate(group.date)}</div>
+              {group.workouts.map(w => (
+                <div key={w.id} className="history-item">
+                  <div className="history-content">
+                    <div className="history-activity">{w.activity}</div>
+                    <div className="history-people">{w.persons}</div>
+                    {w.card_used && (
+                      <div className="history-card" style={{ color: SUIT_COLORS[w.card_used.split(' of ')[1]] }}>
+                        {SUIT_ICONS[w.card_used.split(' of ')[1]]} {w.card_used} (+{w.bonus_points})
+                      </div>
+                    )}
+                    {w.notes && <div className="history-notes">{w.notes}</div>}
                   </div>
-                )}
-                {w.notes && <div className="history-notes">{w.notes}</div>}
-              </div>
-              <div className="history-points">+{w.total_points}</div>
-              <button
-                className="btn-delete"
-                onClick={() => setDeleting(w.id)}
-                title="Delete"
-              >×</button>
-              {deleting === w.id && (
-                <div className="delete-confirm">
-                  <span>Delete this entry?</span>
-                  <button className="btn btn-small btn-danger" onClick={() => deleteWorkout(w.id)}>Yes</button>
-                  <button className="btn btn-small btn-ghost" onClick={() => setDeleting(null)}>No</button>
+                  <div className="history-points">+{w.total_points}</div>
+                  <button
+                    className="btn-delete"
+                    onClick={() => setDeleting(w.id)}
+                    title="Delete"
+                  >×</button>
+                  {deleting === w.id && (
+                    <div className="delete-confirm">
+                      <span>Delete this entry?</span>
+                      <button className="btn btn-small btn-danger" onClick={() => deleteWorkout(w.id)}>Yes</button>
+                      <button className="btn btn-small btn-ghost" onClick={() => setDeleting(null)}>No</button>
+                    </div>
+                  )}
                 </div>
-              )}
+              ))}
             </div>
           ))}
         </div>
