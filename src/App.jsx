@@ -259,7 +259,7 @@ function Dashboard({ workouts, people, weeklyCards }) {
 }
 
 // ─── Weekly Cards Manager ────────────────────────────────────────────────────
-function WeeklyCardsManager({ weeklyCards, people, onRefresh }) {
+function WeeklyCardsManager({ weeklyCards, people, onRefresh, onError }) {
   const [claimModal, setClaimModal] = useState(null);
   const [claimPerson, setClaimPerson] = useState('');
   const [showPicker, setShowPicker] = useState(false);
@@ -274,13 +274,12 @@ function WeeklyCardsManager({ weeklyCards, people, onRefresh }) {
     if (thisWeekCards.length >= 7) return;
     setSaving(true);
     const cardName = `${pickerValue} of ${pickerSuit}`;
-    // Check for duplicates this week
     if (thisWeekCards.some(c => c.card_name === cardName)) {
       setSaving(false);
-      alert('That card is already in this week!');
+      onError('That card is already in this week!');
       return;
     }
-    await supabase.from('weekly_cards').insert({
+    const { error } = await supabase.from('weekly_cards').insert({
       week_start_date: currentWeekStart,
       card_name: cardName,
       suit: pickerSuit,
@@ -289,35 +288,40 @@ function WeeklyCardsManager({ weeklyCards, people, onRefresh }) {
       status: 'Available',
       claimed_by: null
     });
+    if (error) { onError('Failed to add card. Please try again.'); setSaving(false); return; }
     await onRefresh();
     setSaving(false);
   }
 
   async function removeCard(cardId) {
-    await supabase.from('weekly_cards').delete().eq('id', cardId);
+    const { error } = await supabase.from('weekly_cards').delete().eq('id', cardId);
+    if (error) { onError('Failed to remove card.'); return; }
     await onRefresh();
   }
 
   async function clearWeek() {
     if (!window.confirm('Remove all cards for this week?')) return;
-    await supabase.from('weekly_cards').delete().eq('week_start_date', currentWeekStart);
+    const { error } = await supabase.from('weekly_cards').delete().eq('week_start_date', currentWeekStart);
+    if (error) { onError('Failed to clear cards.'); return; }
     await onRefresh();
   }
 
   async function claimCard(card) {
     if (!claimPerson) return;
-    await supabase.from('weekly_cards')
+    const { error } = await supabase.from('weekly_cards')
       .update({ claimed_by: claimPerson, status: 'Claimed' })
       .eq('id', card.id);
+    if (error) { onError('Failed to claim card.'); return; }
     setClaimModal(null);
     setClaimPerson('');
     await onRefresh();
   }
 
   async function unclaimCard(card) {
-    await supabase.from('weekly_cards')
+    const { error } = await supabase.from('weekly_cards')
       .update({ claimed_by: null, status: 'Available' })
       .eq('id', card.id);
+    if (error) { onError('Failed to unclaim card.'); return; }
     await onRefresh();
   }
 
@@ -486,7 +490,7 @@ function WeeklyCardsManager({ weeklyCards, people, onRefresh }) {
 }
 
 // ─── Log Workout ─────────────────────────────────────────────────────────────
-function LogWorkout({ people, weeklyCards, onRefresh }) {
+function LogWorkout({ people, weeklyCards, onRefresh, onError }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedPeople, setSelectedPeople] = useState([]);
   const [activity, setActivity] = useState('');
@@ -534,15 +538,17 @@ function LogWorkout({ people, weeklyCards, onRefresh }) {
     }
 
     setSaving(false);
-    if (!error) {
-      setSuccess(true);
-      setSelectedPeople([]);
-      setActivity('');
-      setSelectedCard('');
-      setNotes('');
-      await onRefresh();
-      setTimeout(() => setSuccess(false), 2500);
+    if (error) {
+      onError('Failed to log workout. Please try again.');
+      return;
     }
+    setSuccess(true);
+    setSelectedPeople([]);
+    setActivity('');
+    setSelectedCard('');
+    setNotes('');
+    await onRefresh();
+    setTimeout(() => setSuccess(false), 2500);
   }
 
   return (
@@ -566,6 +572,21 @@ function LogWorkout({ people, weeklyCards, onRefresh }) {
         <div className="form-group">
           <label className="form-label">Who worked out?</label>
           <div className="people-chips">
+            {people.length > 1 && (
+              <button
+                type="button"
+                className={`chip chip-all ${selectedPeople.length === people.length ? 'active' : ''}`}
+                onClick={() => {
+                  if (selectedPeople.length === people.length) {
+                    setSelectedPeople([]);
+                  } else {
+                    setSelectedPeople(people.map(p => p.name));
+                  }
+                }}
+              >
+                {selectedPeople.length === people.length ? 'Deselect All' : 'All'}
+              </button>
+            )}
             {people.map(p => (
               <button
                 key={p.id}
@@ -661,11 +682,23 @@ function LogWorkout({ people, weeklyCards, onRefresh }) {
 }
 
 // ─── Workout History ─────────────────────────────────────────────────────────
-function WorkoutHistory({ workouts, onRefresh }) {
+function WorkoutHistory({ workouts, onRefresh, onError }) {
   const [deleting, setDeleting] = useState(null);
 
   async function deleteWorkout(id) {
-    await supabase.from('workouts').delete().eq('id', id);
+    const workout = workouts.find(w => w.id === id);
+    if (workout?.card_used) {
+      const weekStart = getMonday(workout.date);
+      await supabase.from('weekly_cards')
+        .update({ claimed_by: null, status: 'Available' })
+        .eq('week_start_date', weekStart)
+        .eq('card_name', workout.card_used);
+    }
+    const { error } = await supabase.from('workouts').delete().eq('id', id);
+    if (error) {
+      onError('Failed to delete workout. Please try again.');
+      return;
+    }
     setDeleting(null);
     await onRefresh();
   }
@@ -717,7 +750,7 @@ function WorkoutHistory({ workouts, onRefresh }) {
 }
 
 // ─── People Manager (Settings) ───────────────────────────────────────────────
-function PeopleManager({ people, onRefresh }) {
+function PeopleManager({ people, onRefresh, onError }) {
   const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
 
@@ -725,14 +758,16 @@ function PeopleManager({ people, onRefresh }) {
     e.preventDefault();
     if (!newName.trim()) return;
     setAdding(true);
-    await supabase.from('people').insert({ name: newName.trim() });
-    setNewName('');
+    const { error } = await supabase.from('people').insert({ name: newName.trim() });
     setAdding(false);
+    if (error) { onError('Failed to add player.'); return; }
+    setNewName('');
     await onRefresh();
   }
 
   async function removePerson(id) {
-    await supabase.from('people').delete().eq('id', id);
+    const { error } = await supabase.from('people').delete().eq('id', id);
+    if (error) { onError('Failed to remove player.'); return; }
     await onRefresh();
   }
 
@@ -770,6 +805,13 @@ export default function App() {
   const [weeklyCards, setWeeklyCards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const showError = useCallback((msg) => {
+    setError(msg);
+    setTimeout(() => setError(null), 4000);
+  }, []);
 
   const fetchAll = useCallback(async () => {
     const [wRes, pRes, cRes] = await Promise.all([
@@ -777,13 +819,22 @@ export default function App() {
       supabase.from('people').select('*').order('name'),
       supabase.from('weekly_cards').select('*').order('id'),
     ]);
+    if (wRes.error || pRes.error || cRes.error) {
+      showError('Failed to load data. Check your connection and try again.');
+    }
     if (wRes.data) setWorkouts(wRes.data);
     if (pRes.data) setPeople(pRes.data);
     if (cRes.data) setWeeklyCards(cRes.data);
     setLoading(false);
-  }, []);
+  }, [showError]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchAll();
+    setRefreshing(false);
+  };
 
   if (loading) {
     return (
@@ -802,14 +853,26 @@ export default function App() {
             <span className="title-icon">🃏</span> Deck Game
           </h1>
         </div>
-        <button className="settings-btn" onClick={() => setShowSettings(!showSettings)}>
-          ⚙️
-        </button>
+        <div className="header-actions">
+          <button className="header-btn" onClick={handleRefresh} disabled={refreshing} title="Refresh data">
+            <span className={`refresh-icon ${refreshing ? 'spinning' : ''}`}>↻</span>
+          </button>
+          <button className="header-btn" onClick={() => setShowSettings(!showSettings)}>
+            ⚙️
+          </button>
+        </div>
       </header>
+
+      {error && (
+        <div className="error-toast">
+          <span>{error}</span>
+          <button className="error-dismiss" onClick={() => setError(null)}>×</button>
+        </div>
+      )}
 
       {showSettings && (
         <div className="settings-panel">
-          <PeopleManager people={people} onRefresh={fetchAll} />
+          <PeopleManager people={people} onRefresh={fetchAll} onError={showError} />
         </div>
       )}
 
@@ -818,13 +881,13 @@ export default function App() {
           <Dashboard workouts={workouts} people={people} weeklyCards={weeklyCards} />
         )}
         {tab === 'cards' && (
-          <WeeklyCardsManager weeklyCards={weeklyCards} people={people} onRefresh={fetchAll} />
+          <WeeklyCardsManager weeklyCards={weeklyCards} people={people} onRefresh={fetchAll} onError={showError} />
         )}
         {tab === 'log' && (
-          <LogWorkout people={people} weeklyCards={weeklyCards} onRefresh={fetchAll} />
+          <LogWorkout people={people} weeklyCards={weeklyCards} onRefresh={fetchAll} onError={showError} />
         )}
         {tab === 'history' && (
-          <WorkoutHistory workouts={workouts} onRefresh={fetchAll} />
+          <WorkoutHistory workouts={workouts} onRefresh={fetchAll} onError={showError} />
         )}
       </main>
 
