@@ -4,7 +4,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, 
 
 const supabase = createClient(
   'https://rcouovmmxiruyolmjlew.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjb3Vvdm1teGlydXlvbG1qbGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMDk5MDQsImV4cCI6MjA4NjU4NTkwNH0.DxDRmjVhdLZmrfJXeSIVDSX2u31IACe85CKwQerZTAs'
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjb3Vvdm1teGlydXlvbG1qbGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMDk5MDQsImV4cCI6MjA4NjU4NTkwNH0.DxDRmjVhdLZmrfJXeSIVDSX2u81IACe85CKwQerZTAs'
 );
 
 // ─── Constants ───────────────────────────────────────────────────────────────
