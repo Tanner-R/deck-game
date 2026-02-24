@@ -4,7 +4,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, 
 
 const supabase = createClient(
   'https://rcouovmmxiruyolmjlew.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjb3Vvdm1teGlydXlvbG1qbGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMDk5MDQsImV4cCI6MjA4NjU4NTkwNH0.DxDRmjVhdLZmrfJXeSIVDSX2u81IACe85CKwQerZTAs'
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjb3Vvdm1teGlydXlvbG1qbGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMDk5MDQsImV4cCI6MjA4NjU4NTkwNH0.DxDRmjVhdLZmrfJXeSIVDSX2u31IACe85CKwQerZTAs'
 );
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -260,45 +260,48 @@ function Dashboard({ workouts, people, weeklyCards }) {
 
 // ─── Weekly Cards Manager ────────────────────────────────────────────────────
 function WeeklyCardsManager({ weeklyCards, people, onRefresh }) {
-  const [drawing, setDrawing] = useState(false);
   const [claimModal, setClaimModal] = useState(null);
   const [claimPerson, setClaimPerson] = useState('');
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerSuit, setPickerSuit] = useState('Spades');
+  const [pickerValue, setPickerValue] = useState('2');
+  const [saving, setSaving] = useState(false);
 
   const currentWeekStart = getMonday(new Date());
   const thisWeekCards = weeklyCards.filter(c => c.week_start_date === currentWeekStart);
 
-  async function drawWeeklyCards() {
-    setDrawing(true);
-    // Generate 7 random unique cards
-    const allCards = [];
-    SUITS.forEach(suit => {
-      VALUES.forEach(val => {
-        allCards.push({ suit, value: val, cardName: `${val} of ${suit}` });
-      });
-    });
-    // Shuffle and pick 7
-    for (let i = allCards.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [allCards[i], allCards[j]] = [allCards[j], allCards[i]];
+  async function addCard() {
+    if (thisWeekCards.length >= 7) return;
+    setSaving(true);
+    const cardName = `${pickerValue} of ${pickerSuit}`;
+    // Check for duplicates this week
+    if (thisWeekCards.some(c => c.card_name === cardName)) {
+      setSaving(false);
+      alert('That card is already in this week!');
+      return;
     }
-    const drawn = allCards.slice(0, 7);
-
-    // Delete existing cards for this week
-    await supabase.from('weekly_cards').delete().eq('week_start_date', currentWeekStart);
-
-    // Insert new cards
-    const rows = drawn.map(c => ({
+    await supabase.from('weekly_cards').insert({
       week_start_date: currentWeekStart,
-      card_name: c.cardName,
-      suit: c.suit,
-      value: c.value,
-      bonus_points: getBonusPoints(c.value),
+      card_name: cardName,
+      suit: pickerSuit,
+      value: pickerValue,
+      bonus_points: getBonusPoints(pickerValue),
       status: 'Available',
       claimed_by: null
-    }));
-    await supabase.from('weekly_cards').insert(rows);
+    });
     await onRefresh();
-    setDrawing(false);
+    setSaving(false);
+  }
+
+  async function removeCard(cardId) {
+    await supabase.from('weekly_cards').delete().eq('id', cardId);
+    await onRefresh();
+  }
+
+  async function clearWeek() {
+    if (!window.confirm('Remove all cards for this week?')) return;
+    await supabase.from('weekly_cards').delete().eq('week_start_date', currentWeekStart);
+    await onRefresh();
   }
 
   async function claimCard(card) {
@@ -325,10 +328,74 @@ function WeeklyCardsManager({ weeklyCards, people, onRefresh }) {
           <h2>Weekly Cards</h2>
           <p className="cards-week">Week of {formatDate(currentWeekStart)}</p>
         </div>
-        <button className="btn btn-primary draw-btn" onClick={drawWeeklyCards} disabled={drawing}>
-          {drawing ? 'Drawing...' : thisWeekCards.length > 0 ? '🔄 Redraw Cards' : '🃏 Draw 7 Cards'}
-        </button>
+        <div className="cards-header-actions">
+          {thisWeekCards.length > 0 && (
+            <button className="btn btn-small btn-ghost" onClick={clearWeek}>Clear All</button>
+          )}
+          <button
+            className="btn btn-primary draw-btn"
+            onClick={() => setShowPicker(!showPicker)}
+            disabled={thisWeekCards.length >= 7}
+          >
+            {thisWeekCards.length >= 7 ? '7/7 Cards Set' : `+ Add Card (${thisWeekCards.length}/7)`}
+          </button>
+        </div>
       </div>
+
+      {/* Card Picker */}
+      {showPicker && thisWeekCards.length < 7 && (
+        <div className="card-picker">
+          <div className="picker-row">
+            <div className="picker-field">
+              <label className="form-label">Value</label>
+              <div className="picker-values">
+                {VALUES.map(v => (
+                  <button
+                    key={v}
+                    type="button"
+                    className={`picker-val-btn ${pickerValue === v ? 'active' : ''}`}
+                    onClick={() => setPickerValue(v)}
+                  >
+                    {v}
+                    <span className="picker-bonus">+{getBonusPoints(v)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="picker-field">
+              <label className="form-label">Suit</label>
+              <div className="picker-suits">
+                {SUITS.map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`picker-suit-btn ${pickerSuit === s ? 'active' : ''}`}
+                    style={{ '--suit-color': SUIT_COLORS[s] }}
+                    onClick={() => setPickerSuit(s)}
+                  >
+                    <span className="picker-suit-icon">{SUIT_ICONS[s]}</span>
+                    <span className="picker-suit-name">{s}</span>
+                    <span className="picker-suit-meaning">{SUIT_MEANINGS[s]}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="picker-preview">
+            <PlayingCard
+              cardName={`${pickerValue} of ${pickerSuit}`}
+              suit={pickerSuit}
+              value={pickerValue}
+              bonus={getBonusPoints(pickerValue)}
+              status="Available"
+              compact
+            />
+            <button className="btn btn-primary" onClick={addCard} disabled={saving}>
+              {saving ? 'Adding...' : `Add ${pickerValue} of ${pickerSuit}`}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Card Legend */}
       <div className="suit-legend">
@@ -365,9 +432,14 @@ function WeeklyCardsManager({ weeklyCards, people, onRefresh }) {
                     Unclaim
                   </button>
                 ) : (
-                  <button className="btn btn-small btn-accent" onClick={() => { setClaimModal(card); setClaimPerson(''); }}>
-                    Claim
-                  </button>
+                  <>
+                    <button className="btn btn-small btn-accent" onClick={() => { setClaimModal(card); setClaimPerson(''); }}>
+                      Claim
+                    </button>
+                    <button className="btn btn-small btn-ghost" onClick={() => removeCard(card.id)} title="Remove card">
+                      ✕
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -376,8 +448,8 @@ function WeeklyCardsManager({ weeklyCards, people, onRefresh }) {
       ) : (
         <div className="cards-empty">
           <div className="empty-icon">🃏</div>
-          <p>No cards drawn this week yet!</p>
-          <p className="empty-sub">Click "Draw 7 Cards" to start</p>
+          <p>No cards added this week yet!</p>
+          <p className="empty-sub">Click "Add Card" to enter cards from your real deck</p>
         </div>
       )}
 

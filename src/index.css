@@ -337,6 +337,64 @@ body {
 
 .draw-btn { white-space: nowrap; }
 
+.cards-header-actions { display: flex; gap: 8px; align-items: center; }
+
+/* Card Picker */
+.card-picker {
+  background: var(--bg-card);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+  animation: slideDown 0.2s ease;
+}
+.picker-row { display: flex; flex-direction: column; gap: 16px; }
+.picker-field { }
+.picker-values { display: flex; flex-wrap: wrap; gap: 6px; }
+.picker-val-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  background: var(--bg-deep);
+  color: var(--text-secondary);
+  font-size: 0.9rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
+  font-family: inherit; min-width: 44px;
+}
+.picker-val-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+.picker-val-btn.active { background: rgba(245,158,11,0.15); border-color: var(--accent); color: var(--accent); }
+.picker-bonus { font-size: 0.6rem; font-weight: 500; color: var(--text-muted); }
+.picker-val-btn.active .picker-bonus { color: var(--accent); }
+
+.picker-suits { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.picker-suit-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 12px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  background: var(--bg-deep);
+  color: var(--text-secondary);
+  cursor: pointer; transition: all 0.15s;
+  font-family: inherit;
+}
+.picker-suit-btn:hover { border-color: var(--suit-color); }
+.picker-suit-btn.active { background: rgba(245,158,11,0.08); border-color: var(--suit-color); }
+.picker-suit-icon { font-size: 1.4rem; color: var(--suit-color); }
+.picker-suit-name { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); }
+.picker-suit-meaning { font-size: 0.65rem; color: var(--text-muted); }
+
+.picker-preview {
+  display: flex; align-items: center; gap: 16px;
+  margin-top: 16px; padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 480px) {
+  .picker-suits { grid-template-columns: repeat(2, 1fr); }
+  .picker-val-btn { padding: 6px 8px; min-width: 38px; font-size: 0.8rem; }
+}
+
 /* ─── Log Workout ────────────────────────────────────────────────────────── */
 .log-workout h2 { font-family: 'Playfair Display', serif; font-size: 1.5rem; margin-bottom: 20px; }
 
