@@ -346,15 +346,49 @@ body {
 .stat-card { text-align: center; padding: 16px; }
 .stat-number { font-family: 'Playfair Display', serif; font-size: 1.8rem; font-weight: 700; color: var(--text-primary); }
 .stat-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+.streak-card .stat-number { color: var(--accent); }
 
 /* Leaderboard */
-.leaderboard { display: flex; flex-direction: column; gap: 10px; }
-.leader-row { display: flex; align-items: center; gap: 12px; }
-.leader-rank { width: 32px; text-align: center; font-size: 1.1rem; }
+.leaderboard { display: flex; flex-direction: column; gap: 4px; }
+.leader-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.leader-row:hover { background: var(--bg-elevated); }
+.leader-row.expanded { background: var(--bg-elevated); }
+.leader-rank { width: 32px; text-align: center; font-size: 1.1rem; flex-shrink: 0; }
 .leader-name { width: 80px; font-weight: 500; font-size: 0.9rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .leader-bar-container { flex: 1; height: 8px; background: var(--bg-deep); border-radius: 8px; overflow: hidden; }
 .leader-bar { height: 100%; background: linear-gradient(90deg, #f59e0b, #fbbf24); border-radius: 8px; transition: width 0.5s ease; min-width: 2px; }
 .leader-points { font-weight: 600; font-size: 0.85rem; color: var(--accent); width: 55px; text-align: right; }
+
+.leader-detail {
+  display: flex;
+  gap: 16px;
+  padding: 8px 12px 12px 48px;
+  animation: slideDown 0.2s ease;
+}
+.detail-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.detail-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.detail-value {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
 
 /* Charts */
 .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }

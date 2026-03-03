@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, PieChart, Pie } from 'recharts';
 
 const supabase = createClient(
-  'https://rcouovmmxiruyolmjlew.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjb3Vvdm1teGlydXlvbG1qbGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMDk5MDQsImV4cCI6MjA4NjU4NTkwNH0.DxDRmjVhdLZmrfJXeSIVDSX2u81IACe85CKwQerZTAs'
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -98,6 +98,7 @@ function Dashboard({ workouts, people, weeklyCards }) {
   const now = new Date();
   const [viewMonth, setViewMonth] = useState(now.getMonth());
   const [viewYear, setViewYear] = useState(now.getFullYear());
+  const [expandedPlayer, setExpandedPlayer] = useState(null);
 
   const isCurrentMonth = viewMonth === now.getMonth() && viewYear === now.getFullYear();
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
@@ -164,6 +165,53 @@ function Dashboard({ workouts, people, weeklyCards }) {
     .map(([name, pts]) => ({ name, points: Math.round(pts * 10) / 10 }))
     .sort((a, b) => b.points - a.points);
 
+  // Team streak (consecutive days with at least one workout, ending today or yesterday)
+  const allDates = [...new Set(workouts.map(w => w.date))].sort().reverse();
+  let streak = 0;
+  if (allDates.length > 0) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let checkDate = new Date(today);
+    // Allow streak to start from today or yesterday
+    const mostRecent = new Date(allDates[0] + 'T00:00:00');
+    const diffFromToday = Math.round((today - mostRecent) / (1000 * 60 * 60 * 24));
+    if (diffFromToday <= 1) {
+      checkDate = new Date(mostRecent);
+      for (const dateStr of allDates) {
+        const d = new Date(dateStr + 'T00:00:00');
+        const expected = new Date(checkDate);
+        expected.setDate(expected.getDate() - streak);
+        expected.setHours(0, 0, 0, 0);
+        d.setHours(0, 0, 0, 0);
+        if (d.getTime() === expected.getTime()) {
+          streak++;
+        } else if (d < expected) {
+          break;
+        }
+      }
+    }
+  }
+
+  // Per-player stats for expandable leaderboard
+  const playerStats = {};
+  people.forEach(p => { playerStats[p.name] = { workouts: 0, cards: 0, suits: {} }; });
+  monthWorkouts.forEach(w => {
+    const names = w.persons.split(',').map(n => n.trim());
+    names.forEach(n => {
+      if (playerStats[n]) playerStats[n].workouts++;
+    });
+    if (w.card_used) {
+      const suit = w.card_used.split(' of ')[1];
+      const claimedNames = w.persons.split(',').map(n => n.trim());
+      claimedNames.forEach(n => {
+        if (playerStats[n]) {
+          playerStats[n].cards++;
+          playerStats[n].suits[suit] = (playerStats[n].suits[suit] || 0) + 1;
+        }
+      });
+    }
+  });
+
   // Cards available this week
   const availableCards = weeklyCards.filter(c => c.status === 'Available').length;
   const totalCards = weeklyCards.length;
@@ -215,37 +263,75 @@ function Dashboard({ workouts, people, weeklyCards }) {
       <div className="stats-row">
         <div className="dash-card stat-card">
           <div className="stat-number">{monthWorkouts.length}</div>
-          <div className="stat-label">Workouts Logged</div>
+          <div className="stat-label">Workouts</div>
         </div>
         <div className="dash-card stat-card">
           <div className="stat-number">{availableCards}/{totalCards}</div>
-          <div className="stat-label">Cards Available</div>
+          <div className="stat-label">Cards Left</div>
         </div>
-        <div className="dash-card stat-card">
-          <div className="stat-number">{people.length}</div>
-          <div className="stat-label">Players</div>
-        </div>
+        {isCurrentMonth && (
+          <div className="dash-card stat-card streak-card">
+            <div className="stat-number">{streak}</div>
+            <div className="stat-label">Day Streak</div>
+          </div>
+        )}
+        {!isCurrentMonth && (
+          <div className="dash-card stat-card">
+            <div className="stat-number">{people.length}</div>
+            <div className="stat-label">Players</div>
+          </div>
+        )}
       </div>
 
       {/* Leaderboard */}
       <div className="dash-card">
         <h3 className="dash-card-title">Leaderboard</h3>
         <div className="leaderboard">
-          {leaderboard.map((p, i) => (
-            <div key={p.name} className="leader-row">
-              <div className="leader-rank">
-                {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
-              </div>
-              <div className="leader-name">{p.name}</div>
-              <div className="leader-bar-container">
+          {leaderboard.map((p, i) => {
+            const stats = playerStats[p.name];
+            const isExpanded = expandedPlayer === p.name;
+            const topSuit = stats ? Object.entries(stats.suits).sort((a, b) => b[1] - a[1])[0] : null;
+            return (
+              <div key={p.name}>
                 <div
-                  className="leader-bar"
-                  style={{ width: `${leaderboard[0]?.points ? (p.points / leaderboard[0].points) * 100 : 0}%` }}
-                ></div>
+                  className={`leader-row ${isExpanded ? 'expanded' : ''}`}
+                  onClick={() => setExpandedPlayer(isExpanded ? null : p.name)}
+                >
+                  <div className="leader-rank">
+                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                  </div>
+                  <div className="leader-name">{p.name}</div>
+                  <div className="leader-bar-container">
+                    <div
+                      className="leader-bar"
+                      style={{ width: `${leaderboard[0]?.points ? (p.points / leaderboard[0].points) * 100 : 0}%` }}
+                    ></div>
+                  </div>
+                  <div className="leader-points">{p.points} pts</div>
+                </div>
+                {isExpanded && stats && (
+                  <div className="leader-detail">
+                    <div className="detail-stat">
+                      <span className="detail-label">Workouts</span>
+                      <span className="detail-value">{stats.workouts}</span>
+                    </div>
+                    <div className="detail-stat">
+                      <span className="detail-label">Cards Used</span>
+                      <span className="detail-value">{stats.cards}</span>
+                    </div>
+                    {topSuit && (
+                      <div className="detail-stat">
+                        <span className="detail-label">Top Suit</span>
+                        <span className="detail-value" style={{ color: SUIT_COLORS[topSuit[0]] }}>
+                          {SUIT_ICONS[topSuit[0]]} {topSuit[0]}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="leader-points">{p.points} pts</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
